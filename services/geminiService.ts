@@ -157,3 +157,58 @@ export const getMedicationInfo = async (
   const response = await chatWithHealthAssistant(prompt, languageName);
   return response.text || "Medication information currently unavailable.";
 };
+
+/**
+ * Identify a medication from a photograph of a pill strip/packaging using Gemini Vision.
+ * @param base64 - Base64-encoded image string (without data URI prefix)
+ * @param mimeType - Image MIME type, e.g. 'image/jpeg' or 'image/png'
+ * @param languageName - Language for the response
+ */
+export const identifyMedicationFromImage = async (
+  base64: string,
+  mimeType: string,
+  languageName: string = 'English'
+): Promise<string> => {
+  const ai = getAI();
+  const prompt = `You are a pharmacist assistant. Analyze this photograph of a medicine strip, tablet box, or medication packaging.
+
+Identify and provide in ${languageName}:
+1. **Medicine Name** (brand name and generic name if visible)
+2. **Composition** (active ingredients and strength/dosage)
+3. **Primary Use** — what condition does this treat?
+4. **Standard Dosage** — typical adult dose and timing
+5. **Key Precautions** — who should NOT take it, drug interactions
+6. **Side Effects** — common ones to watch for
+7. **Jan Aushadhi Generic** — cheaper Indian government generic equivalent if available
+8. **Storage** — how to store
+
+If the image is unclear or not a medication, say so clearly and ask for a clearer photo.`;
+
+  const candidateModels = ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-flash-latest'];
+
+  for (const modelName of candidateModels) {
+    try {
+      const response = await ai.models.generateContent({
+        model: modelName,
+        contents: [{
+          role: 'user',
+          parts: [
+            {
+              inlineData: {
+                mimeType,
+                data: base64,
+              }
+            },
+            { text: prompt }
+          ]
+        }],
+      });
+      return response.text || 'Could not identify medication from this image. Please try a clearer photo.';
+    } catch (err: any) {
+      console.warn(`Vision model ${modelName} failed:`, err?.message || err);
+    }
+  }
+
+  throw new Error('Unable to identify medication. Please try a clearer photo or enter the name manually.');
+};
+

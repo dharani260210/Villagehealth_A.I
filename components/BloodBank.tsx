@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Droplets, Search, Heart, Building2,
   AlertTriangle, CheckCircle2, Phone, Clock,
   ChevronDown, Loader2, RefreshCw, UserPlus,
-  Siren, Activity, Info, MapPin, ShieldCheck
+  Siren, Activity, MapPin, ShieldCheck, Bell, BellOff, Navigation
 } from 'lucide-react';
 import { SupportedLanguage, BloodType, BloodRequest, BloodDonor, BloodBank as IBloodBank, BloodBankStock } from '../types';
 import {
@@ -11,9 +11,13 @@ import {
   fulfillBloodRequest, subscribeToBloodRequests,
   ALL_BLOOD_TYPES, TN_DISTRICTS, formatTimeAgo, isFirebaseConfigured
 } from '../services/bloodBankService';
+import { haversineKm, formatDistance, TN_DISTRICT_COORDS } from '../utils/haversine';
+import { requestNotificationPermission, getFCMToken, saveFCMToken, onForegroundMessage } from '../services/notificationService';
+import AuthModal from './AuthModal';
 
 interface BloodBankProps {
   language: SupportedLanguage;
+  location?: { lat: number; lng: number } | null;
 }
 
 type Tab = 'SEARCH' | 'REQUEST' | 'DONATE' | 'BANK_DASHBOARD' | 'LIVE_REQUESTS';
@@ -45,7 +49,7 @@ const COMPATIBLE_DONOR_TYPES: Record<BloodType, BloodType[]> = {
 
 const EMPTY_STOCK: BloodBankStock = { 'A+': 0, 'A-': 0, 'B+': 0, 'B-': 0, 'O+': 0, 'O-': 0, 'AB+': 0, 'AB-': 0 };
 
-export const BloodBank: React.FC<BloodBankProps> = ({ language }) => {
+export const BloodBank: React.FC<BloodBankProps> = ({ language, location }) => {
   const isTa = language.code === 'ta';
   const [activeTab, setActiveTab] = useState<Tab>('SEARCH');
 
@@ -59,6 +63,15 @@ export const BloodBank: React.FC<BloodBankProps> = ({ language }) => {
   // Live requests state
   const [liveRequests, setLiveRequests] = useState<BloodRequest[]>([]);
   const [fulfillLoading, setFulfillLoading] = useState<string | null>(null);
+
+  // Notification state
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [incomingAlert, setIncomingAlert] = useState<string | null>(null);
+
+  // Auth / OTP modal state
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [pendingAction, setPendingAction] = useState<'REQUEST' | 'DONATE' | null>(null);
+  const [verifiedPhone, setVerifiedPhone] = useState<string | null>(null);
 
   // Request form state
   const [reqForm, setReqForm] = useState({
@@ -85,13 +98,41 @@ export const BloodBank: React.FC<BloodBankProps> = ({ language }) => {
   const [bankLoading, setBankLoading] = useState(false);
   const [bankSuccess, setBankSuccess] = useState('');
 
-  // Subscribe to live blood requests
+  // Subscribe to live blood requests & foreground FCM messages
   useEffect(() => {
     const unsub = subscribeToBloodRequests((requests) => {
       setLiveRequests(requests);
     });
-    return unsub;
+
+    const unsubFCM = onForegroundMessage((payload) => {
+      setIncomingAlert(`${payload.title}: ${payload.body}`);
+      setTimeout(() => setIncomingAlert(null), 6000);
+    });
+
+    return () => {
+      unsub();
+      unsubFCM();
+    };
   }, []);
+
+  const handleToggleNotifications = async () => {
+    if (notificationsEnabled) {
+      setNotificationsEnabled(false);
+      return;
+    }
+    const granted = await requestNotificationPermission();
+    if (granted) {
+      const token = await getFCMToken();
+      if (token) {
+        await saveFCMToken(token, searchDistrict || 'All', searchBloodType || 'All');
+        setNotificationsEnabled(true);
+        setIncomingAlert(isTa ? 'அவசர இரத்த அறிவிப்புகள் செயல்படுத்தப்பட்டது! 🔔' : 'Urgent blood alerts enabled! 🔔');
+        setTimeout(() => setIncomingAlert(null), 4000);
+      } else {
+        setNotificationsEnabled(true);
+      }
+    }
+  };
 
   const handleSearch = useCallback(async () => {
     if (!searchBloodType || !searchDistrict) return;
@@ -108,8 +149,9 @@ export const BloodBank: React.FC<BloodBankProps> = ({ language }) => {
     }
   }, [searchBloodType, searchDistrict]);
 
-  const handleSubmitRequest = async () => {
-    if (!reqForm.patientName || !reqForm.bloodType || !reqForm.hospital || !reqForm.district || !reqForm.contactPhone) return;
+  const executeSubmitRequest = async (phoneToUse?: string) => {
+    const contact = phoneToUse || reqForm.contactPhone;
+    if (!reqForm.patientName || !reqForm.bloodType || !reqForm.hospital || !reqForm.district || !contact) return;
     setReqLoading(true);
     setReqSuccess('');
     try {
@@ -120,7 +162,7 @@ export const BloodBank: React.FC<BloodBankProps> = ({ language }) => {
         district: reqForm.district,
         units: reqForm.units,
         urgency: reqForm.urgency,
-        contactPhone: reqForm.contactPhone,
+        contactPhone: contact,
         notes: reqForm.notes,
         fulfilledBy: null,
       });
@@ -133,8 +175,9 @@ export const BloodBank: React.FC<BloodBankProps> = ({ language }) => {
     }
   };
 
-  const handleRegisterDonor = async () => {
-    if (!donorForm.name || !donorForm.bloodType || !donorForm.district || !donorForm.phone) return;
+  const executeRegisterDonor = async (phoneToUse?: string) => {
+    const phone = phoneToUse || donorForm.phone;
+    if (!donorForm.name || !donorForm.bloodType || !donorForm.district || !phone) return;
     setDonorLoading(true);
     setDonorSuccess('');
     try {
@@ -142,7 +185,7 @@ export const BloodBank: React.FC<BloodBankProps> = ({ language }) => {
         name: donorForm.name,
         bloodType: donorForm.bloodType as BloodType,
         district: donorForm.district,
-        phone: donorForm.phone,
+        phone: phone,
         available: donorForm.available,
         totalDonations: 0,
         lastDonated: null,
@@ -154,6 +197,36 @@ export const BloodBank: React.FC<BloodBankProps> = ({ language }) => {
     } finally {
       setDonorLoading(false);
     }
+  };
+
+  const handleRequestClick = () => {
+    if (!isFirebaseConfigured || verifiedPhone) {
+      executeSubmitRequest(verifiedPhone || undefined);
+    } else {
+      setPendingAction('REQUEST');
+      setIsAuthOpen(true);
+    }
+  };
+
+  const handleDonorClick = () => {
+    if (!isFirebaseConfigured || verifiedPhone) {
+      executeRegisterDonor(verifiedPhone || undefined);
+    } else {
+      setPendingAction('DONATE');
+      setIsAuthOpen(true);
+    }
+  };
+
+  const handleAuthVerified = (uid: string, phone: string) => {
+    setVerifiedPhone(phone);
+    if (pendingAction === 'REQUEST') {
+      setReqForm(f => ({ ...f, contactPhone: phone }));
+      executeSubmitRequest(phone);
+    } else if (pendingAction === 'DONATE') {
+      setDonorForm(f => ({ ...f, phone: phone }));
+      executeRegisterDonor(phone);
+    }
+    setPendingAction(null);
   };
 
   const handleRegisterBank = async () => {
@@ -183,13 +256,26 @@ export const BloodBank: React.FC<BloodBankProps> = ({ language }) => {
   const handleFulfill = async (requestId: string) => {
     setFulfillLoading(requestId);
     try {
-      await fulfillBloodRequest(requestId, 'manual_response');
+      await fulfillBloodRequest(requestId, 'community_volunteer');
     } catch (e) {
       console.error(e);
     } finally {
       setFulfillLoading(null);
     }
   };
+
+  // Compute sorted blood banks with Haversine distance
+  const sortedBanks = useMemo(() => {
+    if (!searchResults) return [];
+    const banks = searchResults.banks;
+    if (!location) return banks.map(b => ({ ...b, distanceKm: undefined }));
+
+    return banks.map(bank => {
+      const coords = TN_DISTRICT_COORDS[bank.district];
+      const dist = coords ? haversineKm(location.lat, location.lng, coords[0], coords[1]) : undefined;
+      return { ...bank, distanceKm: dist };
+    }).sort((a, b) => (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity));
+  }, [searchResults, location]);
 
   const tabs: { id: Tab; label: string; labelTa: string; icon: React.ReactNode }[] = [
     { id: 'SEARCH', label: 'Search', labelTa: 'தேடு', icon: <Search size={16} /> },
@@ -203,21 +289,47 @@ export const BloodBank: React.FC<BloodBankProps> = ({ language }) => {
 
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50">
+      {/* Toast Notification */}
+      {incomingAlert && (
+        <div className="fixed top-16 right-4 left-4 sm:left-auto sm:w-96 z-50 bg-rose-600 text-white px-4 py-3 rounded-2xl shadow-xl border border-rose-400 animate-in flex items-center justify-between">
+          <div className="flex items-center space-x-2 text-xs font-bold">
+            <Bell size={16} className="animate-bounce shrink-0" />
+            <span>{incomingAlert}</span>
+          </div>
+          <button onClick={() => setIncomingAlert(null)} className="text-white/80 hover:text-white text-xs ml-2">✕</button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-gradient-to-r from-rose-700 to-rose-600 text-white px-4 md:px-6 py-5">
         <div className="max-w-4xl mx-auto">
-          <div className="flex items-center space-x-3">
-            <div className="p-2.5 bg-white/20 rounded-2xl shrink-0">
-              <Droplets size={26} className="text-white" />
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center space-x-3">
+              <div className="p-2.5 bg-white/20 rounded-2xl shrink-0">
+                <Droplets size={26} className="text-white" />
+              </div>
+              <div>
+                <h2 className="text-xl font-black">
+                  {isTa ? 'இரத்த வங்கி உதவி போர்டல்' : 'Blood Bank Availability Portal'}
+                </h2>
+                <p className="text-rose-100 text-xs mt-0.5 font-medium">
+                  {isTa ? 'நேரடி கையிருப்பு • தானியாளர் பதிவு • அவசர கோரிக்கைகள்' : 'Live Stock • Donor Registry • Urgent Requests'}
+                </p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-xl font-black">
-                {isTa ? 'இரத்த வங்கி உதவி போர்டல்' : 'Blood Bank Availability Portal'}
-              </h2>
-              <p className="text-rose-100 text-xs mt-0.5 font-medium">
-                {isTa ? 'நேரடி கையிருப்பு • தானியாளர் பதிவு • அவசர கோரிக்கைகள்' : 'Live Stock • Donor Registry • Urgent Requests'}
-              </p>
-            </div>
+
+            {/* FCM Notification toggle */}
+            <button
+              onClick={handleToggleNotifications}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all self-start sm:self-auto ${
+                notificationsEnabled
+                  ? 'bg-emerald-500/30 text-emerald-100 border-emerald-400/40 hover:bg-emerald-500/40'
+                  : 'bg-white/20 text-white border-white/30 hover:bg-white/30'
+              }`}
+            >
+              {notificationsEnabled ? <Bell size={14} className="text-emerald-300" /> : <BellOff size={14} />}
+              <span>{notificationsEnabled ? (isTa ? 'அறிவிப்புகள் ON' : 'Alerts ON') : (isTa ? '🔔 அவசர அறிவிப்பு பெறுக' : '🔔 Enable Alerts')}</span>
+            </button>
           </div>
 
           {/* Firebase status badge */}
@@ -347,18 +459,26 @@ export const BloodBank: React.FC<BloodBankProps> = ({ language }) => {
                   </div>
                 </div>
 
-                {/* Blood Banks */}
-                {searchResults.banks.length > 0 && (
+                {/* Blood Banks with Distance */}
+                {sortedBanks.length > 0 && (
                   <div className="space-y-3">
                     <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center">
                       <Building2 size={13} className="mr-1.5 text-rose-500" />
-                      {isTa ? 'இரத்த வங்கிகள்' : 'Blood Banks'} ({searchResults.banks.length})
+                      {isTa ? 'இரத்த வங்கிகள் (தூர வரிசை)' : 'Blood Banks (Sorted by Distance)'} ({sortedBanks.length})
                     </h4>
-                    {searchResults.banks.map(bank => (
+                    {sortedBanks.map(bank => (
                       <div key={bank.id} className="bg-white border border-emerald-200 rounded-3xl p-5 shadow-sm space-y-3">
-                        <div className="flex items-start justify-between">
+                        <div className="flex items-start justify-between gap-2">
                           <div>
-                            <h4 className="font-bold text-slate-800 text-sm">{bank.name}</h4>
+                            <div className="flex items-center space-x-2">
+                              <h4 className="font-bold text-slate-800 text-sm">{bank.name}</h4>
+                              {bank.distanceKm !== undefined && (
+                                <span className="flex items-center space-x-1 text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-bold shrink-0">
+                                  <Navigation size={10} />
+                                  <span>{formatDistance(bank.distanceKm)}</span>
+                                </span>
+                              )}
+                            </div>
                             <p className="text-xs text-slate-500 flex items-center mt-0.5">
                               <MapPin size={11} className="mr-1 text-rose-500 shrink-0" />{bank.address}
                             </p>
@@ -401,7 +521,7 @@ export const BloodBank: React.FC<BloodBankProps> = ({ language }) => {
                   </div>
                 )}
 
-                {/* Donors */}
+                {/* Donors with 90-day cooldown status */}
                 {searchResults.donors.length > 0 && (
                   <div className="space-y-3">
                     <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center">
@@ -417,7 +537,10 @@ export const BloodBank: React.FC<BloodBankProps> = ({ language }) => {
                             </div>
                             <div>
                               <p className="font-bold text-slate-800 text-sm">{donor.name}</p>
-                              <p className="text-[10px] text-slate-400">{donor.totalDonations || 0} {isTa ? 'தானங்கள்' : 'donations'}</p>
+                              <p className="text-[10px] text-slate-400">
+                                {donor.totalDonations || 0} {isTa ? 'தானங்கள்' : 'donations'}
+                                {donor.lastDonated && ` • ${isTa ? 'கடைசி:' : 'Last:'} ${formatTimeAgo(donor.lastDonated)}`}
+                              </p>
                             </div>
                           </div>
                           <a href={`tel:${donor.phone}`} className="p-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl transition-colors border border-rose-200 min-h-[38px] flex items-center">
@@ -603,6 +726,23 @@ export const BloodBank: React.FC<BloodBankProps> = ({ language }) => {
                   </FormField>
                 </div>
 
+                {/* Automated SMS Alert Banner for CRITICAL Urgency */}
+                {reqForm.urgency === 'CRITICAL' && (
+                  <div className="bg-rose-50 border border-rose-300 rounded-2xl p-3.5 flex items-start space-x-2.5">
+                    <span className="text-lg">📲</span>
+                    <div>
+                      <p className="text-xs font-bold text-rose-800">
+                        {isTa ? 'தானியங்கி SMS ஒளிபரப்பு செயல்படுத்தப்படும்' : 'Automated SMS Broadcast Active'}
+                      </p>
+                      <p className="text-[11px] text-rose-700 mt-0.5">
+                        {isTa
+                          ? `${reqForm.district || 'தேர்ந்தெடுக்கப்பட்ட'} மாவட்டத்திலுள்ள அனைத்து பொருத்தமான தானியாளர்களுக்கும் உடனடியாக SMS மற்றும் புஷ் நோட்டிபிகேஷன் அனுப்பப்படும்.`
+                          : `An instant SMS alert and FCM push notification will be broadcasted to all registered ${reqForm.bloodType || ''} donors in ${reqForm.district || 'the district'}.`}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 <FormField label={isTa ? 'கூடுதல் குறிப்புகள் (விரும்பினால்)' : 'Additional Notes (optional)'}>
                   <textarea value={reqForm.notes} onChange={e => setReqForm(f => ({ ...f, notes: e.target.value }))} rows={2}
                     placeholder={isTa ? 'நோயாளியின் நிலை, அறுவை சிகிச்சை தகவல் போன்றவை...' : 'Patient condition, surgery info, etc...'}
@@ -610,7 +750,7 @@ export const BloodBank: React.FC<BloodBankProps> = ({ language }) => {
                 </FormField>
 
                 <button
-                  onClick={handleSubmitRequest}
+                  onClick={handleRequestClick}
                   disabled={reqLoading || !reqForm.patientName || !reqForm.bloodType || !reqForm.hospital || !reqForm.district || !reqForm.contactPhone}
                   className="w-full py-4 bg-rose-600 hover:bg-rose-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-2xl font-extrabold text-sm shadow-lg transition-all flex items-center justify-center space-x-2 min-h-[48px]"
                 >
@@ -689,7 +829,7 @@ export const BloodBank: React.FC<BloodBankProps> = ({ language }) => {
                 </div>
 
                 <button
-                  onClick={handleRegisterDonor}
+                  onClick={handleDonorClick}
                   disabled={donorLoading || !donorForm.name || !donorForm.bloodType || !donorForm.district || !donorForm.phone}
                   className="w-full py-4 bg-rose-600 hover:bg-rose-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-2xl font-extrabold text-sm shadow-lg transition-all flex items-center justify-center space-x-2 min-h-[48px]"
                 >
@@ -792,6 +932,14 @@ export const BloodBank: React.FC<BloodBankProps> = ({ language }) => {
           </div>
         )}
       </div>
+
+      {/* Phone OTP Verification Modal */}
+      <AuthModal
+        isOpen={isAuthOpen}
+        onClose={() => setIsAuthOpen(false)}
+        onVerified={handleAuthVerified}
+        language={language}
+      />
     </div>
   );
 };

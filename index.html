@@ -5,6 +5,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VillageHealth AI</title>
+
+    <!-- PWA -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#047857">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="VillageHealth AI">
+    <link rel="apple-touch-icon" href="/icon-192.png">
+    <meta name="description" content="AI-powered rural health assistant — blood bank, symptom checker, first aid, maternal care and more for Tamil Nadu communities.">
+
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -65,5 +75,16 @@
 <body class="bg-slate-50 text-slate-900">
     <div id="root"></div>
 <script type="module" src="/index.tsx"></script>
+
+<!-- Service Worker Registration -->
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js')
+        .then(reg => console.log('[VillageHealth] Service Worker registered:', reg.scope))
+        .catch(err => console.warn('[VillageHealth] SW registration failed:', err));
+    });
+  }
+</script>
 </body>
 </html>

@@ -11,11 +11,16 @@ import FirstAidGuide from './components/FirstAidGuide';
 import ImmunizationTracker from './components/ImmunizationTracker';
 import GovernmentSchemes from './components/GovernmentSchemes';
 import BloodBank from './components/BloodBank';
+import HealthJournal from './components/HealthJournal';
+import BloodStockDashboard from './components/BloodStockDashboard';
+import MaternalTracker from './components/MaternalTracker';
+import LabTestGuide from './components/LabTestGuide';
 import SOSEmergencyModal from './components/SOSEmergencyModal';
 import LiveDoctorModal from './components/LiveDoctorModal';
-import { 
+import {
   MessageSquare, Mic, MapPin, Globe, AlertCircle, Menu, X,
-  HeartPulse, Siren, Stethoscope, Radio, Pill, ShieldAlert, Baby, Activity, Building2, Droplets
+  HeartPulse, Siren, Stethoscope, Radio, Pill, ShieldAlert, Baby,
+  Activity, Building2, Droplets, BookHeart, BarChart2, FlaskConical
 } from 'lucide-react';
 
 
@@ -29,6 +34,7 @@ const App: React.FC = () => {
   const [isLiveDoctorOpen, setIsLiveDoctorOpen] = useState(false);
 
   const lang = language.code;
+  const isTa = lang === 'ta';
 
   useEffect(() => {
     if (navigator.geolocation) {
@@ -41,6 +47,8 @@ const App: React.FC = () => {
   }, []);
 
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
+
+  const navTo = (m: AppMode) => { setMode(m); setIsSidebarOpen(false); };
 
   return (
     <div className="flex flex-col h-screen bg-slate-50 font-sans">
@@ -103,17 +111,34 @@ const App: React.FC = () => {
       <div className="flex flex-1 overflow-hidden relative">
         {/* Sidebar Navigation */}
         <nav className={`fixed md:relative inset-y-0 left-0 w-64 bg-white border-r border-slate-200 z-40 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 transition-transform duration-300 ease-in-out flex flex-col`}>
-          <div className="p-4 space-y-1.5 overflow-y-auto flex-1">
-            <h2 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 px-2">{t(lang, 'nav.services')}</h2>
-            <NavButton active={mode === AppMode.CHAT} onClick={() => { setMode(AppMode.CHAT); setIsSidebarOpen(false); }} icon={<MessageSquare size={18} />} label={t(lang, 'nav.chat')} description={t(lang, 'nav.chat.desc')} />
-            <NavButton active={mode === AppMode.VOICE} onClick={() => { setMode(AppMode.VOICE); setIsSidebarOpen(false); }} icon={<Mic size={18} />} label={t(lang, 'nav.voice')} description={t(lang, 'nav.voice.desc')} />
-            <NavButton active={mode === AppMode.LOCATOR} onClick={() => { setMode(AppMode.LOCATOR); setIsSidebarOpen(false); }} icon={<MapPin size={18} />} label={t(lang, 'nav.locator')} description={t(lang, 'nav.locator.desc')} />
-            <NavButton active={mode === AppMode.MEDICINE} onClick={() => { setMode(AppMode.MEDICINE); setIsSidebarOpen(false); }} icon={<Pill size={18} />} label={t(lang, 'nav.medicine')} description={t(lang, 'nav.medicine.desc')} />
-            <NavButton active={mode === AppMode.SYMPTOMS} onClick={() => { setMode(AppMode.SYMPTOMS); setIsSidebarOpen(false); }} icon={<Activity size={18} />} label={t(lang, 'nav.symptoms')} description={t(lang, 'nav.symptoms.desc')} />
-            <NavButton active={mode === AppMode.FIRST_AID} onClick={() => { setMode(AppMode.FIRST_AID); setIsSidebarOpen(false); }} icon={<ShieldAlert size={18} />} label={t(lang, 'nav.firstaid')} description={t(lang, 'nav.firstaid.desc')} />
-            <NavButton active={mode === AppMode.VACCINES} onClick={() => { setMode(AppMode.VACCINES); setIsSidebarOpen(false); }} icon={<Baby size={18} />} label={t(lang, 'nav.vaccines')} description={t(lang, 'nav.vaccines.desc')} />
-            <NavButton active={mode === AppMode.GOVT_SCHEMES} onClick={() => { setMode(AppMode.GOVT_SCHEMES); setIsSidebarOpen(false); }} icon={<Building2 size={18} />} label={t(lang, 'nav.schemes')} description={t(lang, 'nav.schemes.desc')} />
-            <NavButton active={mode === AppMode.BLOOD_BANK} onClick={() => { setMode(AppMode.BLOOD_BANK); setIsSidebarOpen(false); }} icon={<Droplets size={18} />} label={lang === 'ta' ? 'இரத்த வங்கி போர்டல்' : 'Blood Bank Portal'} description={lang === 'ta' ? 'நேரடி இரத்த கையிருப்பு' : 'Live stock & donor alerts'} />
+          <div className="p-4 space-y-1 overflow-y-auto flex-1">
+            <h2 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-2">{t(lang, 'nav.services')}</h2>
+
+            {/* Core AI Tools */}
+            <NavButton active={mode === AppMode.CHAT} onClick={() => navTo(AppMode.CHAT)} icon={<MessageSquare size={18} />} label={t(lang, 'nav.chat')} description={t(lang, 'nav.chat.desc')} />
+            <NavButton active={mode === AppMode.VOICE} onClick={() => navTo(AppMode.VOICE)} icon={<Mic size={18} />} label={t(lang, 'nav.voice')} description={t(lang, 'nav.voice.desc')} />
+            <NavButton active={mode === AppMode.LOCATOR} onClick={() => navTo(AppMode.LOCATOR)} icon={<MapPin size={18} />} label={t(lang, 'nav.locator')} description={t(lang, 'nav.locator.desc')} />
+            <NavButton active={mode === AppMode.MEDICINE} onClick={() => navTo(AppMode.MEDICINE)} icon={<Pill size={18} />} label={t(lang, 'nav.medicine')} description={t(lang, 'nav.medicine.desc')} />
+            <NavButton active={mode === AppMode.SYMPTOMS} onClick={() => navTo(AppMode.SYMPTOMS)} icon={<Activity size={18} />} label={t(lang, 'nav.symptoms')} description={t(lang, 'nav.symptoms.desc')} />
+            <NavButton active={mode === AppMode.FIRST_AID} onClick={() => navTo(AppMode.FIRST_AID)} icon={<ShieldAlert size={18} />} label={t(lang, 'nav.firstaid')} description={t(lang, 'nav.firstaid.desc')} />
+            <NavButton active={mode === AppMode.VACCINES} onClick={() => navTo(AppMode.VACCINES)} icon={<Baby size={18} />} label={t(lang, 'nav.vaccines')} description={t(lang, 'nav.vaccines.desc')} />
+            <NavButton active={mode === AppMode.GOVT_SCHEMES} onClick={() => navTo(AppMode.GOVT_SCHEMES)} icon={<Building2 size={18} />} label={t(lang, 'nav.schemes')} description={t(lang, 'nav.schemes.desc')} />
+
+            <div className="border-t border-slate-100 my-2" />
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-2 pb-1">
+              {isTa ? 'புதிய சேவைகள்' : 'New Features'}
+            </p>
+
+            {/* Blood */}
+            <NavButton active={mode === AppMode.BLOOD_BANK} onClick={() => navTo(AppMode.BLOOD_BANK)} icon={<Droplets size={18} />} label={isTa ? 'இரத்த வங்கி போர்டல்' : 'Blood Bank Portal'} description={isTa ? 'நேரடி இரத்த கையிருப்பு' : 'Live stock & donor alerts'} />
+            <NavButton active={mode === AppMode.DASHBOARD} onClick={() => navTo(AppMode.DASHBOARD)} icon={<BarChart2 size={18} />} label={isTa ? 'இரத்த இருப்பு டாஷ்போர்டு' : 'Blood Stock Dashboard'} description={isTa ? 'மாவட்ட அளவு நிலை' : 'District-level stock chart'} />
+
+            {/* Health Tracking */}
+            <NavButton active={mode === AppMode.HEALTH_JOURNAL} onClick={() => navTo(AppMode.HEALTH_JOURNAL)} icon={<BookHeart size={18} />} label={isTa ? 'சுகாதார நாட்குறிப்பு' : 'Health Journal'} description={isTa ? 'BP, சர்க்கரை, வெப்பம்' : 'BP, sugar, temperature log'} />
+            <NavButton active={mode === AppMode.MATERNAL} onClick={() => navTo(AppMode.MATERNAL)} icon={<Baby size={18} />} label={isTa ? 'தாய்மை கண்காணிப்பு' : 'Maternal Tracker'} description={isTa ? 'கர்ப்பகால வழிகாட்டி' : 'Pregnancy week guide'} />
+
+            {/* Reference */}
+            <NavButton active={mode === AppMode.LAB_TESTS} onClick={() => navTo(AppMode.LAB_TESTS)} icon={<FlaskConical size={18} />} label={isTa ? 'ஆய்வக சோதனை வழிகாட்டி' : 'Lab Test Guide'} description={isTa ? 'பரிசோதனை முடிவு விளக்கம்' : 'Understand your results'} />
           </div>
 
           <div className="p-4 border-t border-slate-100 bg-slate-50 space-y-2">
@@ -159,21 +184,28 @@ const App: React.FC = () => {
             {mode === AppMode.FIRST_AID && <FirstAidGuide language={language} />}
             {mode === AppMode.VACCINES && <ImmunizationTracker language={language} />}
             {mode === AppMode.GOVT_SCHEMES && <GovernmentSchemes language={language} />}
-            {mode === AppMode.BLOOD_BANK && <BloodBank language={language} />}
+            {mode === AppMode.BLOOD_BANK && <BloodBank language={language} location={location} />}
+            {mode === AppMode.HEALTH_JOURNAL && <HealthJournal language={language} />}
+            {mode === AppMode.DASHBOARD && <BloodStockDashboard language={language} />}
+            {mode === AppMode.MATERNAL && <MaternalTracker language={language} />}
+            {mode === AppMode.LAB_TESTS && <LabTestGuide language={language} />}
           </div>
         </main>
       </div>
 
       {/* Mobile Bottom Navigation Bar */}
-      <div className="md:hidden bg-white border-t border-slate-200 flex items-center justify-around py-2.5 px-3 shadow-lg">
-        <MobileNavButton active={mode === AppMode.CHAT} onClick={() => setMode(AppMode.CHAT)} icon={<MessageSquare size={19} />} />
-        <MobileNavButton active={mode === AppMode.VOICE} onClick={() => setMode(AppMode.VOICE)} icon={<Mic size={19} />} />
-        <MobileNavButton active={mode === AppMode.LOCATOR} onClick={() => setMode(AppMode.LOCATOR)} icon={<MapPin size={19} />} />
-        <MobileNavButton active={mode === AppMode.MEDICINE} onClick={() => setMode(AppMode.MEDICINE)} icon={<Pill size={19} />} />
-        <MobileNavButton active={mode === AppMode.SYMPTOMS} onClick={() => setMode(AppMode.SYMPTOMS)} icon={<Activity size={19} />} />
-        <MobileNavButton active={mode === AppMode.BLOOD_BANK} onClick={() => setMode(AppMode.BLOOD_BANK)} icon={<Droplets size={19} />} />
-        <button onClick={() => setIsSosOpen(true)} className="p-2.5 rounded-2xl bg-rose-600 text-white shadow-md">
-          <Siren size={19} />
+      <div className="md:hidden bg-white border-t border-slate-200 flex items-center justify-around py-2 px-2 shadow-lg overflow-x-auto">
+        <MobileNavButton active={mode === AppMode.CHAT} onClick={() => setMode(AppMode.CHAT)} icon={<MessageSquare size={18} />} />
+        <MobileNavButton active={mode === AppMode.VOICE} onClick={() => setMode(AppMode.VOICE)} icon={<Mic size={18} />} />
+        <MobileNavButton active={mode === AppMode.LOCATOR} onClick={() => setMode(AppMode.LOCATOR)} icon={<MapPin size={18} />} />
+        <MobileNavButton active={mode === AppMode.MEDICINE} onClick={() => setMode(AppMode.MEDICINE)} icon={<Pill size={18} />} />
+        <MobileNavButton active={mode === AppMode.SYMPTOMS} onClick={() => setMode(AppMode.SYMPTOMS)} icon={<Activity size={18} />} />
+        <MobileNavButton active={mode === AppMode.BLOOD_BANK} onClick={() => setMode(AppMode.BLOOD_BANK)} icon={<Droplets size={18} />} />
+        <MobileNavButton active={mode === AppMode.HEALTH_JOURNAL} onClick={() => setMode(AppMode.HEALTH_JOURNAL)} icon={<BookHeart size={18} />} />
+        <MobileNavButton active={mode === AppMode.MATERNAL} onClick={() => setMode(AppMode.MATERNAL)} icon={<Baby size={18} />} />
+        <MobileNavButton active={mode === AppMode.LAB_TESTS} onClick={() => setMode(AppMode.LAB_TESTS)} icon={<FlaskConical size={18} />} />
+        <button onClick={() => setIsSosOpen(true)} className="p-2.5 rounded-2xl bg-rose-600 text-white shadow-md shrink-0">
+          <Siren size={18} />
         </button>
       </div>
 
@@ -199,7 +231,7 @@ const NavButton: React.FC<NavButtonProps> = ({ active, onClick, icon, label, des
       active ? 'bg-emerald-600 text-white shadow-md ring-2 ring-emerald-50' : 'text-slate-600 hover:bg-slate-100'
     }`}
   >
-    <div className={`p-2 rounded-xl transition-colors ${active ? 'bg-emerald-500' : 'bg-slate-100 group-hover:bg-slate-200'}`}>
+    <div className={`p-2 rounded-xl transition-colors shrink-0 ${active ? 'bg-emerald-500' : 'bg-slate-100 group-hover:bg-slate-200'}`}>
       {icon}
     </div>
     <div className="truncate">
@@ -210,7 +242,7 @@ const NavButton: React.FC<NavButtonProps> = ({ active, onClick, icon, label, des
 );
 
 const MobileNavButton: React.FC<{ active: boolean; onClick: () => void; icon: React.ReactNode }> = ({ active, onClick, icon }) => (
-  <button onClick={onClick} className={`p-2.5 rounded-2xl transition-all ${active ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-400'}`}>
+  <button onClick={onClick} className={`p-2.5 rounded-2xl transition-all shrink-0 ${active ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-400'}`}>
     {icon}
   </button>
 );

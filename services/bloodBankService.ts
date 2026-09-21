@@ -176,12 +176,19 @@ export const TN_DISTRICTS = [
 export const ALL_BLOOD_TYPES: BloodType[] = ['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'];
 
 /**
- * Search blood banks and donors by blood type + district
+ * Search blood banks and donors by blood type + district.
+ * Donors who donated within the last 90 days are excluded (safety cooldown).
  */
 export async function searchBloodAvailability(
   bloodType: BloodType,
   district: string
 ): Promise<{ banks: BloodBank[]; donors: BloodDonor[] }> {
+  const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
+
+  function isOnCooldown(donor: BloodDonor): boolean {
+    return !!(donor.lastDonated && Date.now() - donor.lastDonated < NINETY_DAYS_MS);
+  }
+
   if (isFirebaseConfigured && db) {
     try {
       const banksSnap = await get(ref(db, 'bloodBanks'));
@@ -202,7 +209,12 @@ export async function searchBloodAvailability(
       if (donorsSnap.exists()) {
         donorsSnap.forEach((child) => {
           const donor = { id: child.key!, ...child.val() } as BloodDonor;
-          if (donor.bloodType === bloodType && donor.district === district && donor.available) {
+          if (
+            donor.bloodType === bloodType &&
+            donor.district === district &&
+            donor.available &&
+            !isOnCooldown(donor)
+          ) {
             donors.push(donor);
           }
         });
@@ -216,10 +228,17 @@ export async function searchBloodAvailability(
 
   // Demo fallback
   await new Promise(r => setTimeout(r, 600));
+  const NINETY_DAYS_MS_fb = 90 * 24 * 60 * 60 * 1000;
   const banks = DEMO_BLOOD_BANKS.filter(b => b.district === district && b.stock[bloodType] > 0);
-  const donors = DEMO_DONORS.filter(d => d.bloodType === bloodType && d.district === district && d.available);
+  const donors = DEMO_DONORS.filter(d =>
+    d.bloodType === bloodType &&
+    d.district === district &&
+    d.available &&
+    !(d.lastDonated && Date.now() - d.lastDonated < NINETY_DAYS_MS_fb)
+  );
   return { banks, donors };
 }
+
 
 /**
  * Get all open blood requests (real-time)

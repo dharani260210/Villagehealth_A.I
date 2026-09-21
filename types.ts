@@ -98,7 +98,11 @@ export enum AppMode {
   FIRST_AID = 'FIRST_AID',
   VACCINES = 'VACCINES',
   GOVT_SCHEMES = 'GOVT_SCHEMES',
-  BLOOD_BANK = 'BLOOD_BANK'
+  BLOOD_BANK = 'BLOOD_BANK',
+  HEALTH_JOURNAL = 'HEALTH_JOURNAL',
+  DASHBOARD = 'DASHBOARD',
+  MATERNAL = 'MATERNAL',
+  LAB_TESTS = 'LAB_TESTS',
 }
 
 export type SupportedLanguage = {
@@ -106,4 +110,19 @@ export type SupportedLanguage = {
   name: string;
   nativeName: string;
 };
+
+export interface HealthJournalEntry {
+  id?: string;
+  userId: string;
+  date: string; // ISO date string YYYY-MM-DD
+  systolic?: number;   // mmHg
+  diastolic?: number;  // mmHg
+  bloodSugar?: number; // mg/dL
+  temperature?: number; // °C
+  weight?: number;     // kg
+  spO2?: number;       // % oxygen saturation
+  symptoms?: string;
+  notes?: string;
+  createdAt: number;
+}
 
